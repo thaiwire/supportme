@@ -18,6 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectItem,
@@ -27,7 +28,7 @@ import {
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SelectContent } from "@radix-ui/react-select";
-import { PersonStandingIcon } from "lucide-react";
+import { CalendarIcon, PersonStandingIcon } from "lucide-react";
 import Link from "next/link";
 import { comma } from "postcss/lib/list";
 import { useForm } from "react-hook-form";
@@ -39,6 +40,17 @@ const formSchema = z
     accountType: z.enum(["personal", "company"]),
     companyName: z.string().optional(),
     numberOfEmployees: z.coerce.number().optional(),
+    dob: z.date().refine((date) => {
+      const today = new Date();
+      const eighteenYearsAgo = new Date(
+        today.setFullYear(
+          today.getFullYear() - 18,
+          today.getMonth(),
+          today.getDate()
+        )
+      );
+      return date < eighteenYearsAgo;
+    }, "You must be 18 years old"),
   })
   .superRefine((data, ctx) => {
     if (data.accountType === "company" && !data.companyName) {
@@ -161,8 +173,34 @@ export default function SignupPage() {
                       </FormItem>
                     )}
                   />
+                  
                 </>
               )}
+              <FormField
+                    control={form.control}
+                    name="dob"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col pt-2">
+                        <FormLabel>Date of Birth</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button variant="outline"
+                              className="normal-case justify-between pr-1"
+                              >
+                                <span>Pick a Date</span>
+                                <CalendarIcon/>
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                        </Popover> 
+                                              
+
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
               <Button type="submit">Sign Up</Button>
             </form>
           </Form>
