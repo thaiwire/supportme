@@ -1,5 +1,6 @@
 "use client";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -27,30 +28,23 @@ import {
 } from "@/components/ui/select";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { PopoverContent } from "@radix-ui/react-popover";
 import { SelectContent } from "@radix-ui/react-select";
 import { CalendarIcon, PersonStandingIcon } from "lucide-react";
 import Link from "next/link";
+import { format } from "date-fns";
 import { comma } from "postcss/lib/list";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
+import { PasswordInput } from "@/components/ui/password-input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useRouter } from "next/navigation";
 
-const formSchema = z
+const accountTypeSchema = z
   .object({
-    email: z.string().email(),
     accountType: z.enum(["personal", "company"]),
     companyName: z.string().optional(),
     numberOfEmployees: z.coerce.number().optional(),
-    dob: z.date().refine((date) => {
-      const today = new Date();
-      const eighteenYearsAgo = new Date(
-        today.setFullYear(
-          today.getFullYear() - 18,
-          today.getMonth(),
-          today.getDate()
-        )
-      );
-      return date < eighteenYearsAgo;
-    }, "You must be 18 years old"),
   })
   .superRefine((data, ctx) => {
     if (data.accountType === "company" && !data.companyName) {
@@ -72,19 +66,91 @@ const formSchema = z
     }
   });
 
+const passwordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .refine((password) => {
+        return (
+          password.match(/[a-z]/) &&
+          password.match(/[A-Z]/) &&
+          password.match(/[0-9]/) &&
+          password.match(/[^a-zA-Z0-9]/)
+        );
+      }, "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character"),
+
+    Passwordconfirm: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .refine((password) => {
+        return (
+          password.match(/[a-z]/) &&
+          password.match(/[A-Z]/) &&
+          password.match(/[0-9]/) &&
+          password.match(/[^a-zA-Z0-9]/)
+        );
+      }, "Password must contain at least one uppercase letter, one lowercase letter, one number and one special character"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.password !== data.Passwordconfirm) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom, // custom error code  for password not match
+        path: ["Passwordconfirm"],
+        message: "Password does not match",
+      });
+    }
+  });
+
+const baseSchema: z.ZodSchema = z
+  .object({
+    email: z.string().email(),
+    acceptTerms: z
+      .boolean({
+        required_error: "You must accept the terms and conditions",
+      })
+      .refine((checked) => checked, "You must accept the terms and conditions"),
+    dob: z.date().refine((date) => {
+      const today = new Date();
+      const eighteenYearsAgo = new Date(
+        today.setFullYear(
+          today.getFullYear() + 1,
+          today.getMonth(),
+          today.getDate()
+        )
+      );
+      return date < eighteenYearsAgo;
+    }, "You must be 1 years old"),
+  })
+  .superRefine((data, ctx) => {});
+
+const formSchema = baseSchema.and(accountTypeSchema).and(passwordSchema);
+
 export default function SignupPage() {
+  const router = useRouter();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
+      password: "",
+      Passwordconfirm: "",
+      accountType: "personal",
+      companyName: "",
     },
   });
 
-  const handleSubmit = () => {
-    console.log("login success");
+  const handleSubmit = (data: z.infer<typeof formSchema>) => {
+    console.log("login success", data);
+    router.push("/dashboard");
   };
 
   const accountType = form.watch("accountType");
+  const dobFromDate = new Date();
+  dobFromDate.setFullYear(
+    dobFromDate.getFullYear() - 120,
+    dobFromDate.getMonth(),
+    dobFromDate.getDate()
+  );
 
   return (
     <>
@@ -173,34 +239,105 @@ export default function SignupPage() {
                       </FormItem>
                     )}
                   />
-                  
                 </>
               )}
               <FormField
-                    control={form.control}
-                    name="dob"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col pt-2">
-                        <FormLabel>Date of Birth</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button variant="outline"
-                              className="normal-case justify-between pr-1"
-                              >
-                                <span>Pick a Date</span>
-                                <CalendarIcon/>
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                        </Popover> 
-                                              
+                control={form.control}
+                name="dob"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col pt-2">
+                    <FormLabel>Date of Birth</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className="normal-case justify-between pr-1"
+                          >
+                            {!!field.value ? (
+                              format(field.value, "dd/MM/yyyy")
+                            ) : (
+                              <span>Pick a Date</span>
+                            )}
 
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                            <CalendarIcon />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="w-auto p-0 bg-gray-950"
+                      >
+                        <Calendar
+                          mode="single"
+                          defaultMonth={field.value}
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          fixedWeeks
+                          weekStartsOn={1}
+                          fromMonth={dobFromDate}
+                          // toDate={new Date()}
+                        />
+                      </PopoverContent>
+                    </Popover>
 
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <PasswordInput placeholder="" {...field} />
+                    </FormControl>
+
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="Passwordconfirm"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password Confirm</FormLabel>
+                    <FormControl>
+                      <PasswordInput placeholder="" {...field} />
+                    </FormControl>
+
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="acceptTerms"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex gap-2 justify-center items-center">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormLabel>I Accept on All Conditions</FormLabel>
+                    </div>
+                    <FormDescription>
+                      You must accept the terms and conditions{" "}
+                      <Link href="/terms" className="text-blue-500">
+                        terms and conditions
+                      </Link>
+                    </FormDescription>
+
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <Button type="submit">Sign Up</Button>
             </form>
           </Form>
